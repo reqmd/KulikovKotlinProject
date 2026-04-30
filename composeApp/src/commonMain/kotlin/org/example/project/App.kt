@@ -10,6 +10,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 
 data class ShoppingItem(
@@ -21,6 +24,12 @@ data class ShoppingItem(
 
 val LightColors = lightColorScheme()
 val DarkColors = darkColorScheme()
+
+// Маршруты навигации
+object Routes {
+    const val LIST = "list"
+    const val ADD = "add"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,14 +49,10 @@ fun App() {
         )
     }
 
-    var newName by remember { mutableStateOf("") }
-    var newQuantity by remember { mutableStateOf("") }
-    var newUnit by remember { mutableStateOf("шт") }
-
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-
     var showClearDialog by remember { mutableStateOf(false) }
+    val navController = rememberNavController()
 
     MaterialTheme(colorScheme = colors) {
         Surface(
@@ -66,163 +71,183 @@ fun App() {
                             scope.launch {
                                 snackbarHostState.showSnackbar("Купленные товары удалены")
                             }
-                        }) {
-                            Text("Удалить")
-                        }
+                        }) { Text("Удалить") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showClearDialog = false }) {
-                            Text("Отмена")
-                        }
+                        TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
                     }
                 )
             }
 
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("🛒 Список покупок") },
-                        actions = {
-                            TextButton(onClick = { showClearDialog = true }) {
-                                Text("Очистить")
+            NavHost(
+                navController = navController,
+                startDestination = Routes.LIST
+            ) {
+                // --- Экран 1: Список ---
+                composable(Routes.LIST) {
+                    ListScreen(
+                        items = items,
+                        snackbarHostState = snackbarHostState,
+                        onToggle = { item ->
+                            items = items.map { i ->
+                                if (i == item) i.copy(bought = !i.bought) else i
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        onClearClick = { showClearDialog = true },
+                        onAddClick = { navController.navigate(Routes.ADD) }
                     )
-                },
-                snackbarHost = { SnackbarHost(snackbarHostState) }
-            ) { innerPadding ->
+                }
 
-                // --- Адаптивность через BoxWithConstraints ---
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .fillMaxSize()
-                ) {
-                    val isExpanded = maxWidth > 600.dp  // планшет если шире 600dp
-
-                    if (isExpanded) {
-                        Row(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .fillMaxSize()
-                        ) {
-                            AddItemForm(
-                                newName = newName,
-                                newQuantity = newQuantity,
-                                newUnit = newUnit,
-                                onNameChange = { newName = it },
-                                onQuantityChange = { newQuantity = it },
-                                onUnitChange = { newUnit = it },
-                                onAdd = {
-                                    val qty = newQuantity.toIntOrNull() ?: 1
-                                    if (newName.isNotBlank()) {
-                                        val addedName = newName.trim()
-                                        items = items + ShoppingItem(addedName, qty, newUnit.trim())
-                                        newName = ""
-                                        newQuantity = ""
-                                        newUnit = "шт"
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("$addedName добавлен")
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f).padding(end = 16.dp)
-                            )
-                            ShoppingList(
-                                items = items,
-                                onToggle = { item ->
-                                    items = items.map { i ->
-                                        if (i == item) i.copy(bought = !i.bought) else i
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .fillMaxSize()
-                        ) {
-                            AddItemForm(
-                                newName = newName,
-                                newQuantity = newQuantity,
-                                newUnit = newUnit,
-                                onNameChange = { newName = it },
-                                onQuantityChange = { newQuantity = it },
-                                onUnitChange = { newUnit = it },
-                                onAdd = {
-                                    val qty = newQuantity.toIntOrNull() ?: 1
-                                    if (newName.isNotBlank()) {
-                                        val addedName = newName.trim()
-                                        items = items + ShoppingItem(addedName, qty, newUnit.trim())
-                                        newName = ""
-                                        newQuantity = ""
-                                        newUnit = "шт"
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("$addedName добавлен")
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            ShoppingList(
-                                items = items,
-                                onToggle = { item ->
-                                    items = items.map { i ->
-                                        if (i == item) i.copy(bought = !i.bought) else i
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
+                // --- Экран 2: Добавление товара ---
+                composable(Routes.ADD) {
+                    AddScreen(
+                        snackbarHostState = snackbarHostState,
+                        onAdd = { name, quantity, unit ->
+                            items = items + ShoppingItem(name, quantity, unit)
+                            scope.launch {
+                                snackbarHostState.showSnackbar("$name добавлен")
+                            }
+                            navController.popBackStack() // ← возврат назад
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
         }
     }
 }
 
+// ─────────────────────────────────────────
+// Экран 1 — Список покупок
+// ─────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddItemForm(
-    newName: String,
-    newQuantity: String,
-    newUnit: String,
-    onNameChange: (String) -> Unit,
-    onQuantityChange: (String) -> Unit,
-    onUnitChange: (String) -> Unit,
-    onAdd: () -> Unit,
-    modifier: Modifier = Modifier
+fun ListScreen(
+    items: List<ShoppingItem>,
+    snackbarHostState: SnackbarHostState,
+    onToggle: (ShoppingItem) -> Unit,
+    onClearClick: () -> Unit,
+    onAddClick: () -> Unit
 ) {
-    Card(modifier = modifier.padding(bottom = 12.dp)) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("🛒 Список покупок") },
+                actions = {
+                    TextButton(onClick = onClearClick) { Text("Очистить") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onAddClick) {
+                Text("+", style = MaterialTheme.typography.headlineMedium)
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        BoxWithConstraints(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+        ) {
+            val isExpanded = maxWidth > 600.dp
+
+            if (isExpanded) {
+                // Планшет — список в две колонки
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxSize()
+                ) {
+                    ShoppingList(
+                        items = items.filter { !it.bought },
+                        onToggle = onToggle,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    ShoppingList(
+                        items = items.filter { it.bought },
+                        onToggle = onToggle,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    )
+                }
+            } else {
+                // Телефон — обычный список
+                ShoppingList(
+                    items = items,
+                    onToggle = onToggle,
+                    modifier = Modifier.padding(16.dp).fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────
+// Экран 2 — Добавление товара
+// ─────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddScreen(
+    snackbarHostState: SnackbarHostState,
+    onAdd: (String, Int, String) -> Unit,
+    onBack: () -> Unit
+) {
+    var newName by remember { mutableStateOf("") }
+    var newQuantity by remember { mutableStateOf("") }
+    var newUnit by remember { mutableStateOf("шт") }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Добавить товар") },
+                navigationIcon = {
+                    // Кнопка назад
+                    TextButton(onClick = onBack) { Text("← Назад") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp)
+                .fillMaxSize()
+        ) {
             OutlinedTextField(
                 value = newName,
-                onValueChange = onNameChange,
+                onValueChange = { newName = it },
                 label = { Text("Название") },
                 modifier = Modifier.fillMaxWidth()
             )
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedTextField(
                     value = newQuantity,
-                    onValueChange = onQuantityChange,
+                    onValueChange = { newQuantity = it },
                     label = { Text("Кол-во") },
                     modifier = Modifier.weight(1f).padding(end = 8.dp)
                 )
                 OutlinedTextField(
                     value = newUnit,
-                    onValueChange = onUnitChange,
+                    onValueChange = { newUnit = it },
                     label = { Text("Ед.") },
                     modifier = Modifier.weight(1f)
                 )
             }
             Button(
-                onClick = onAdd,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                onClick = {
+                    val qty = newQuantity.toIntOrNull() ?: 1
+                    if (newName.isNotBlank()) {
+                        onAdd(newName.trim(), qty, newUnit.trim())
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
             ) {
                 Text("+ Добавить")
             }
@@ -230,6 +255,9 @@ fun AddItemForm(
     }
 }
 
+// ─────────────────────────────────────────
+// Компонент списка
+// ─────────────────────────────────────────
 @Composable
 fun ShoppingList(
     items: List<ShoppingItem>,
