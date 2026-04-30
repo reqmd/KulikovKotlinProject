@@ -1,5 +1,6 @@
 package org.example.project
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,12 +15,17 @@ data class ShoppingItem(
     val name: String,
     val quantity: Int,
     val unit: String,
-    val bought: Boolean = false   // ← новое поле
+    val bought: Boolean = false
 )
+
+val LightColors = lightColorScheme()
+val DarkColors = darkColorScheme()
 
 @Composable
 fun App() {
-    // Состояние списка — теперь изменяемое
+    val darkTheme = isSystemInDarkTheme()
+    val colors = if (darkTheme) DarkColors else LightColors
+
     var items by remember {
         mutableStateOf(
             listOf(
@@ -32,96 +38,99 @@ fun App() {
         )
     }
 
-    // Состояние полей ввода
     var newName by remember { mutableStateOf("") }
     var newQuantity by remember { mutableStateOf("") }
     var newUnit by remember { mutableStateOf("шт") }
 
-    MaterialTheme {
-        Column(modifier = Modifier.padding(16.dp)) {
+    MaterialTheme(colorScheme = colors) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .safeDrawingPadding()  // ← отступ под статус бар
+                    .padding(16.dp)
+            ) {
 
-            Text(
-                text = "🛒 Список покупок",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+                Text(
+                    text = "🛒 Список покупок",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
 
-            // --- Форма добавления ---
-            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
 
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Название") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         OutlinedTextField(
-                            value = newQuantity,
-                            onValueChange = { newQuantity = it },
-                            label = { Text("Кол-во") },
-                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("Название") },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = newUnit,
-                            onValueChange = { newUnit = it },
-                            label = { Text("Ед.") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
 
-                    Button(
-                        onClick = {
-                            val qty = newQuantity.toIntOrNull() ?: 1
-                            if (newName.isNotBlank()) {
-                                items = items + ShoppingItem(newName.trim(), qty, newUnit.trim())
-                                // Очищаем поля
-                                newName = ""
-                                newQuantity = ""
-                                newUnit = "шт"
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    ) {
-                        Text("+ Добавить")
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            OutlinedTextField(
+                                value = newQuantity,
+                                onValueChange = { newQuantity = it },
+                                label = { Text("Кол-во") },
+                                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            )
+                            OutlinedTextField(
+                                value = newUnit,
+                                onValueChange = { newUnit = it },
+                                label = { Text("Ед.") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                val qty = newQuantity.toIntOrNull() ?: 1
+                                if (newName.isNotBlank()) {
+                                    items = items + ShoppingItem(newName.trim(), qty, newUnit.trim())
+                                    newName = ""
+                                    newQuantity = ""
+                                    newUnit = "шт"
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            Text("+ Добавить")
+                        }
                     }
                 }
-            }
 
-            // --- Список ---
-            LazyColumn {
-                items(items) { item ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                LazyColumn {
+                    items(items) { item ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
                         ) {
-                            Checkbox(
-                                checked = item.bought,
-                                onCheckedChange = {
-                                    // Переключаем bought у нужного элемента
-                                    items = items.map { i ->
-                                        if (i == item) i.copy(bought = !i.bought) else i
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = item.bought,
+                                    onCheckedChange = {
+                                        items = items.map { i ->
+                                            if (i == item) i.copy(bought = !i.bought) else i
+                                        }
                                     }
-                                }
-                            )
-                            Text(
-                                text = "${item.name} — ${item.quantity} ${item.unit}",
-                                modifier = Modifier.weight(1f),
-                                // Зачёркиваем купленные
-                                textDecoration = if (item.bought)
-                                    TextDecoration.LineThrough else TextDecoration.None,
-                                color = if (item.bought)
-                                    MaterialTheme.colorScheme.outline
-                                else
-                                    MaterialTheme.colorScheme.onSurface
-                            )
+                                )
+                                Text(
+                                    text = "${item.name} — ${item.quantity} ${item.unit}",
+                                    modifier = Modifier.weight(1f),
+                                    textDecoration = if (item.bought)
+                                        TextDecoration.LineThrough else TextDecoration.None,
+                                    color = if (item.bought)
+                                        MaterialTheme.colorScheme.outline
+                                    else
+                                        MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
