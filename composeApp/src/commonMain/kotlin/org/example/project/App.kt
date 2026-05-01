@@ -25,7 +25,6 @@ data class ShoppingItem(
 val LightColors = lightColorScheme()
 val DarkColors = darkColorScheme()
 
-// Маршруты навигации
 object Routes {
     const val LIST = "list"
     const val ADD = "add"
@@ -79,11 +78,7 @@ fun App() {
                 )
             }
 
-            NavHost(
-                navController = navController,
-                startDestination = Routes.LIST
-            ) {
-                // --- Экран 1: Список ---
+            NavHost(navController = navController, startDestination = Routes.LIST) {
                 composable(Routes.LIST) {
                     ListScreen(
                         items = items,
@@ -97,8 +92,6 @@ fun App() {
                         onAddClick = { navController.navigate(Routes.ADD) }
                     )
                 }
-
-                // --- Экран 2: Добавление товара ---
                 composable(Routes.ADD) {
                     AddScreen(
                         snackbarHostState = snackbarHostState,
@@ -107,7 +100,7 @@ fun App() {
                             scope.launch {
                                 snackbarHostState.showSnackbar("$name добавлен")
                             }
-                            navController.popBackStack() // ← возврат назад
+                            navController.popBackStack()
                         },
                         onBack = { navController.popBackStack() }
                     )
@@ -118,7 +111,7 @@ fun App() {
 }
 
 // ─────────────────────────────────────────
-// Экран 1 — Список покупок
+// Экран 1 — Список
 // ─────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,17 +143,11 @@ fun ListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         BoxWithConstraints(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+            modifier = Modifier.padding(innerPadding).fillMaxSize()
         ) {
             val isExpanded = maxWidth > 600.dp
-
             if (isExpanded) {
-                // Планшет — список в две колонки
-                Row(
-                    modifier = Modifier.padding(16.dp).fillMaxSize()
-                ) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxSize()) {
                     ShoppingList(
                         items = items.filter { !it.bought },
                         onToggle = onToggle,
@@ -173,7 +160,6 @@ fun ListScreen(
                     )
                 }
             } else {
-                // Телефон — обычный список
                 ShoppingList(
                     items = items,
                     onToggle = onToggle,
@@ -185,7 +171,7 @@ fun ListScreen(
 }
 
 // ─────────────────────────────────────────
-// Экран 2 — Добавление товара
+// Экран 2 — Добавление с поиском
 // ─────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -198,12 +184,18 @@ fun AddScreen(
     var newQuantity by remember { mutableStateOf("") }
     var newUnit by remember { mutableStateOf("шт") }
 
+    // Состояния интернет-запроса
+    var searchResults by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Добавить товар") },
                 navigationIcon = {
-                    // Кнопка назад
                     TextButton(onClick = onBack) { Text("← Назад") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -220,13 +212,102 @@ fun AddScreen(
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                label = { Text("Название") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+
+            // Поле названия + кнопка поиска
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = {
+                        newName = it
+                        errorMessage = null   // сбрасываем ошибку при вводе
+                        searchResults = emptyList()
+                    },
+                    label = { Text("Название") },
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    isError = errorMessage != null
+                )
+                Button(
+                    onClick = {
+                        if (newName.isBlank()) {
+                            errorMessage = "Введите название для поиска"
+                            return@Button
+                        }
+                        scope.launch {
+                            isLoading = true
+                            errorMessage = null
+                            val result = NetworkService.searchProducts(newName)
+                            isLoading = false
+                            result
+                                .onSuccess { products ->
+                                    searchResults = products
+                                    if (products.isEmpty()) {
+                                        errorMessage = "Ничего не найдено"
+                                    }
+                                }
+                                .onFailure { e ->
+                                    errorMessage = when {
+                                        e.message?.contains("Unable to resolve host") == true ->
+                                            "Нет подключения к интернету"
+                                        e.message?.contains("timeout") == true ->
+                                            "Превышено время ожидания"
+                                        else -> "Ошибка: ${e.message}"
+                                    }
+                                }
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.CenterVertically)
+                ) {
+                    Text("Найти")
+                }
+            }
+
+            // Индикатор загрузки
+            if (isLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+
+            // Сообщение об ошибке
+            errorMessage?.let { error ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        text = "⚠️ $error",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            // Результаты поиска — нажатие подставляет название
+            if (searchResults.isNotEmpty()) {
+                Text(
+                    text = "Результаты поиска:",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                )
+                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                    items(searchResults) { product ->
+                        TextButton(
+                            onClick = { newName = product.product_name },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = product.product_name,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = newQuantity,
                     onValueChange = { newQuantity = it },
@@ -240,16 +321,19 @@ fun AddScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+
             Button(
                 onClick = {
                     val qty = newQuantity.toIntOrNull() ?: 1
                     if (newName.isNotBlank()) {
                         onAdd(newName.trim(), qty, newUnit.trim())
+                    } else {
+                        errorMessage = "Введите название товара"
                     }
                 },
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
             ) {
-                Text("+ Добавить")
+                Text("+ Добавить в список")
             }
         }
     }
@@ -267,9 +351,7 @@ fun ShoppingList(
     LazyColumn(modifier = modifier) {
         items(items) { item ->
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp),
