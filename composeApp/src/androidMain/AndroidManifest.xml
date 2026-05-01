@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Камера -->
+<uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+<!-- Микрофон -->
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+<!-- GPS -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+<!-- Сенсоры (не требуют разрешения в манифесте, доступны без запроса) -->
+<uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
