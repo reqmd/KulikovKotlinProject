@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 data class ShoppingItem(
@@ -28,13 +29,18 @@ val DarkColors = darkColorScheme()
 object Routes {
     const val LIST = "list"
     const val ADD = "add"
+    const val SETTINGS = "settings"  // ← новый маршрут
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun App() {
-    val darkTheme = isSystemInDarkTheme()
-    val colors = if (darkTheme) DarkColors else LightColors
+fun App(settingsStore: ThemeRepository) {
+    // Читаем сохранённую тему из DataStore
+    val savedTheme by settingsStore.isDarkTheme.collectAsState(initial = null)
+    val systemDark = isSystemInDarkTheme()
+    val isDark = savedTheme ?: systemDark  // если не задано — системная
+
+    val colors = if (isDark) DarkColors else LightColors
 
     var items by remember {
         mutableStateOf(
@@ -89,7 +95,8 @@ fun App() {
                             }
                         },
                         onClearClick = { showClearDialog = true },
-                        onAddClick = { navController.navigate(Routes.ADD) }
+                        onAddClick = { navController.navigate(Routes.ADD) },
+                        onSettingsClick = { navController.navigate(Routes.SETTINGS) }
                     )
                 }
                 composable(Routes.ADD) {
@@ -101,6 +108,15 @@ fun App() {
                                 snackbarHostState.showSnackbar("$name добавлен")
                             }
                             navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen(
+                        isDarkTheme = savedTheme,
+                        onThemeChange = { value ->
+                            scope.launch { settingsStore.setDarkTheme(value) }
                         },
                         onBack = { navController.popBackStack() }
                     )
@@ -120,7 +136,8 @@ fun ListScreen(
     snackbarHostState: SnackbarHostState,
     onToggle: (ShoppingItem) -> Unit,
     onClearClick: () -> Unit,
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -128,6 +145,10 @@ fun ListScreen(
                 title = { Text("🛒 Список покупок") },
                 actions = {
                     TextButton(onClick = onClearClick) { Text("Очистить") }
+                    // Кнопка настроек
+                    IconButton(onClick = onSettingsClick) {
+                        Text("⚙️")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -184,7 +205,6 @@ fun AddScreen(
     var newQuantity by remember { mutableStateOf("") }
     var newUnit by remember { mutableStateOf("шт") }
 
-    // Состояния интернет-запроса
     var searchResults by remember { mutableStateOf<List<Product>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -212,14 +232,12 @@ fun AddScreen(
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
-
-            // Поле названия + кнопка поиска
             Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = newName,
                     onValueChange = {
                         newName = it
-                        errorMessage = null   // сбрасываем ошибку при вводе
+                        errorMessage = null
                         searchResults = emptyList()
                     },
                     label = { Text("Название") },
@@ -240,9 +258,7 @@ fun AddScreen(
                             result
                                 .onSuccess { products ->
                                     searchResults = products
-                                    if (products.isEmpty()) {
-                                        errorMessage = "Ничего не найдено"
-                                    }
+                                    if (products.isEmpty()) errorMessage = "Ничего не найдено"
                                 }
                                 .onFailure { e ->
                                     errorMessage = when {
@@ -261,12 +277,10 @@ fun AddScreen(
                 }
             }
 
-            // Индикатор загрузки
             if (isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             }
 
-            // Сообщение об ошибке
             errorMessage?.let { error ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -282,7 +296,6 @@ fun AddScreen(
                 }
             }
 
-            // Результаты поиска — нажатие подставляет название
             if (searchResults.isNotEmpty()) {
                 Text(
                     text = "Результаты поиска:",
@@ -295,10 +308,7 @@ fun AddScreen(
                             onClick = { newName = product.product_name },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = product.product_name,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Text(text = product.product_name, modifier = Modifier.fillMaxWidth())
                         }
                         HorizontalDivider()
                     }
