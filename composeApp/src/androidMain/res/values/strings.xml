@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">KulikovKotlinProject</string>
+    <string name="app_name">Список покупок</string>
     <string name="app_title">🛒 Список покупок</string>
     <string name="field_name">Название</string>
     <string name="field_quantity">Кол-во</string>
